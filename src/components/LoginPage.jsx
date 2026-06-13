@@ -1,6 +1,8 @@
 
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { userDb } from '../lib/userDb'
+
 
 export default function LoginPage({ onLogin }) {
   const [mode, setMode] = useState('login') // 'login' | 'register' | 'prompt-register'
@@ -53,95 +55,27 @@ export default function LoginPage({ onLogin }) {
 
     setLoading(true)
 
-    // Fallback if Supabase is not configured
-    if (!supabase) {
-      setTimeout(() => {
-        localStorage.setItem('lexaid_user', JSON.stringify({ email, loginTime: new Date().toISOString() }))
-        setLoading(false)
-        onLogin?.()
-      }, 500)
-      return
-    }
-
     try {
       if (mode === 'login') {
-        // 1. Secure check if the email exists in auth.users
-        let emailExists = true
-        let checkSuccessful = false
+        // 1. Check if the email exists in local db
+        const emailExists = userDb.checkEmailExists(email)
 
-        try {
-          const { data: exists, error: checkError } = await supabase.rpc('check_email_exists', { p_email: email })
-          if (checkError) {
-            console.warn('RPC check_email_exists failed or missing. Trying profiles table lookup.', checkError)
-          } else {
-            emailExists = exists
-            checkSuccessful = true
-          }
-        } catch (err) {
-          console.warn('Exception calling check_email_exists:', err)
-        }
-
-        // 2. If RPC check failed, fall back to checking profiles table directly
-        if (!checkSuccessful) {
-          try {
-            const { data: profile, error: profileError } = await supabase
-              .from('profiles')
-              .select('email')
-              .eq('email', email)
-              .maybeSingle()
-
-            if (profileError) {
-              console.warn('Profiles table query failed. Attempting direct sign-in fallback.', profileError)
-            } else {
-              emailExists = !!profile
-              checkSuccessful = true
-            }
-          } catch (err) {
-            console.warn('Exception querying profiles table:', err)
-          }
-        }
-
-        // 3. If we are sure the email does not exist, prompt register
-        if (checkSuccessful && !emailExists) {
+        // 2. If email does not exist, prompt register
+        if (!emailExists) {
           setMode('prompt-register')
           setLoading(false)
           return
         }
 
-        // 4. Email exists (or all checks failed/skipped), attempt sign-in
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password
-        })
-
-        if (signInError) throw signInError
-
-        if (data?.session) {
-          onLogin?.(data.session)
-        }
+        // 3. Email exists, attempt login in local db
+        const user = userDb.loginUser(email, password)
+        localStorage.setItem('lexaid_user', JSON.stringify(user))
+        onLogin?.({ user })
       } else if (mode === 'register') {
-        // Create user account
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: fullName
-            }
-          }
-        })
-
-        if (signUpError) throw signUpError
-
-        // In Supabase, if email confirmation is disabled, signUp logs the user in immediately
-        if (data?.session) {
-          onLogin?.(data.session)
-        } else {
-          setSuccess('Registration successful! Please check your email inbox to confirm your account.')
-          setMode('login')
-          setPassword('')
-          setConfirmPassword('')
-        }
+        // Register in local db
+        const user = userDb.registerUser(email, password, fullName)
+        localStorage.setItem('lexaid_user', JSON.stringify(user))
+        onLogin?.({ user })
       }
     } catch (err) {
       setError(err.message || 'An authentication error occurred. Please try again.')
@@ -155,20 +89,19 @@ export default function LoginPage({ onLogin }) {
     setSuccess('')
     setLoading(true)
 
-    if (!supabase) {
-      setError('Supabase is not configured. Google Sign-In is unavailable.')
-      setLoading(false)
-      return
-    }
-
     try {
-      const { error: oAuthError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin
+      // Simulate OAuth login delay for a premium feel
+      setTimeout(() => {
+        const mockGoogleUser = {
+          id: 'google_' + Math.random().toString(36).substring(2, 11),
+          email: 'google_user@example.com',
+          fullName: 'Google User',
+          createdAt: new Date().toISOString()
         }
-      })
-      if (oAuthError) throw oAuthError
+        localStorage.setItem('lexaid_user', JSON.stringify(mockGoogleUser))
+        setLoading(false)
+        onLogin?.({ user: mockGoogleUser })
+      }, 1500)
     } catch (err) {
       setError(err.message || 'Google Sign-In failed')
       setLoading(false)

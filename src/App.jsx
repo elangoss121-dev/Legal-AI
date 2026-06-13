@@ -1209,26 +1209,42 @@ export default function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // 1. Check local database user session first
+    const user = localStorage.getItem('lexaid_user')
+    if (user) {
+      try {
+        setSession({ user: JSON.parse(user) })
+        setLoading(false)
+        return
+      } catch (e) {
+        console.error('Failed to parse local user session:', e)
+      }
+    }
+
+    // 2. If no local user, check Supabase
     if (supabase) {
       // Get initial session
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session)
+      supabase.auth.getSession().then(({ data: { session: sbSession } }) => {
+        if (sbSession) {
+          setSession(sbSession)
+        }
         setLoading(false)
       })
 
       // Listen to auth changes
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        setSession(session)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sbSession) => {
+        if (sbSession) {
+          setSession(sbSession)
+        } else {
+          // If logged out from Supabase, ensure local session is also cleared
+          localStorage.removeItem('lexaid_user')
+          setSession(null)
+        }
         setLoading(false)
       })
 
       return () => subscription.unsubscribe()
     } else {
-      // Fallback if Supabase is not configured
-      const user = localStorage.getItem('lexaid_user')
-      if (user) {
-        setSession({ user: JSON.parse(user) })
-      }
       setLoading(false)
     }
   }, [])
