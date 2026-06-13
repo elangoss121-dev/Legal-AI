@@ -36,13 +36,6 @@ const LANGUAGE_FLAGS = {
 }
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
-const COUNTRIES = [
-  'India', 'United States', 'United Kingdom', 'Canada', 'Australia',
-  'Germany', 'France', 'Singapore', 'UAE', 'South Africa', 'Nigeria',
-  'Pakistan', 'Bangladesh', 'Sri Lanka', 'Nepal', 'Malaysia', 'Philippines',
-  'Indonesia', 'Brazil', 'Mexico', 'Argentina', 'Kenya', 'Ghana'
-]
-
 const CATEGORIES = [
   'Criminal', 'Civil / Dispute', 'Property & Real Estate', 'Employment & Labour',
   'Consumer Rights', 'Family & Matrimonial', 'Cyber Crime', 'Taxation',
@@ -59,25 +52,25 @@ const FAQS = [
 ]
 
 // ─── Gemini System Prompt Builder ─────────────────────────────────────────────
-const buildSystemPrompt = (country, category) => `You are LexAid, an expert AI legal guidance assistant specializing in ${country} law. You help ordinary people understand their legal rights and navigate legal situations.
+const buildSystemPrompt = (category) => `You are LexAid, an expert AI legal guidance assistant specializing in Indian law (including IPC, CrPC, CPC, BNS 2023, BNSS 2023, BSA 2023, and other central or state statutes of India). You help ordinary people understand their legal rights and navigate legal situations.
 
 The user's input may be in any language (Hindi, Tamil, Telugu, Bengali, Marathi, Kannada, Gujarati, Punjabi, Malayalam, Odia, Urdu, or English). You MUST:
 1. Understand the user's situation regardless of input language
 2. Identify the input language and detect any grammatical errors
 3. Normalize and clarify the user's query in English
-4. Provide comprehensive, accurate legal guidance for ${country} jurisdiction
-5. Cite specific laws, acts, sections, IPC/CrPC/BNS codes applicable to ${country}. If AUTHORITATIVE LEGAL CONTEXT is retrieved from the database, prioritize and explicitly cite those specific sections in your legal guidance.
+4. Provide comprehensive, accurate legal guidance for the Indian jurisdiction
+5. Cite specific Indian laws, acts, sections, IPC/CrPC/BNS codes. If AUTHORITATIVE LEGAL CONTEXT is retrieved from the database, prioritize and explicitly cite those specific sections in your legal guidance.
 
 Return ONLY valid JSON in this exact format (zero text outside the JSON):
 {
   "original_language": "detected language name e.g. Hindi or English",
   "corrected_text": "Clean English interpretation of the user's query with grammar corrected",
   "legal_summary": "One-sentence plain summary of the legal issue identified",
-  "relevant_laws": "Comprehensive list of specific laws, acts, sections, constitutional provisions relevant to this situation in ${country}. Include IPC/BNS sections, CrPC/BNSS sections, relevant High Court or Supreme Court judgments if applicable.",
+  "relevant_laws": "Comprehensive list of specific Indian laws, acts, sections, constitutional provisions relevant to this situation in India. Include IPC/BNS sections, CrPC/BNSS sections, relevant High Court or Supreme Court judgments if applicable.",
   "legal_implications": "Plain-English explanation of what this situation means legally — rights, obligations, liabilities. Avoid jargon or explain all terms.",
   "immediate_actions": "CRITICAL immediate steps if the situation is urgent. Specific, actionable. If not urgent, write N/A.",
   "step_by_step_guidance": ["Detailed step 1", "Detailed step 2", "Detailed step 3", "Detailed step 4", "Detailed step 5"],
-  "where_to_file": "Specific offices, portals (URLs if available), helplines, courts or tribunals in ${country} where the user should go",
+  "where_to_file": "Specific offices, portals (URLs if available), helplines, courts or tribunals in India where the user should go",
   "documents_required": ["Document or evidence item 1", "Document or evidence item 2", "Document or evidence item 3"],
   "sample_document": "A complete, ready-to-use formal draft complaint, legal notice, or statement. Include proper formatting with To:, From:, Subject:, Date:, and body with legal references.",
   "communication_scripts": {
@@ -96,7 +89,7 @@ IMPORTANT RULES:
 - medium = pending deadline, unresolved dispute with escalation risk
 - low = general query, no immediate harm
 - Always be empathetic, empowering, and clear
-- For ${country}, cite the most current applicable laws
+- For India, cite the most current applicable laws
 - The sample_document must be professionally formatted and ready for real use`
 
 // ─── Urgency Config ────────────────────────────────────────────────────────────
@@ -141,9 +134,9 @@ async function transcribeWithSarvam(audioBlob) {
 }
 
 // ─── Build user message ───────────────────────────────────────────────────────
-function buildUserMsg(text, country, category, detectedLangCode, retrievedContext = '') {
+function buildUserMsg(text, category, detectedLangCode, retrievedContext = '') {
   const langName = LANGUAGE_NAMES[detectedLangCode] || 'Unknown'
-  let msg = `Country/Jurisdiction: ${country}
+  let msg = `Country/Jurisdiction: India
 Legal Category: ${category}
 Input Language Detected by STT: ${langName} (${detectedLangCode || 'auto'})\n`
 
@@ -157,10 +150,10 @@ ${text}`
 }
 
 // ─── Gemini Legal Analysis ────────────────────────────────────────────────────
-async function analyzeWithGemini(text, country, category, detectedLangCode, retrievedContext = '') {
+async function analyzeWithGemini(text, category, detectedLangCode, retrievedContext = '') {
   const body = {
-    system_instruction: { parts: [{ text: buildSystemPrompt(country, category) }] },
-    contents: [{ role: 'user', parts: [{ text: buildUserMsg(text, country, category, detectedLangCode, retrievedContext) }] }],
+    system_instruction: { parts: [{ text: buildSystemPrompt(category) }] },
+    contents: [{ role: 'user', parts: [{ text: buildUserMsg(text, category, detectedLangCode, retrievedContext) }] }],
     generationConfig: { temperature: 0.3, maxOutputTokens: 8192, responseMimeType: 'application/json' },
   }
   const response = await fetch(GEMINI_URL, {
@@ -184,12 +177,12 @@ async function analyzeWithGemini(text, country, category, detectedLangCode, retr
 }
 
 // ─── DeepSeek Legal Analysis ──────────────────────────────────────────────────
-async function analyzeWithDeepSeek(text, country, category, detectedLangCode, retrievedContext = '') {
+async function analyzeWithDeepSeek(text, category, detectedLangCode, retrievedContext = '') {
   const body = {
     model: 'deepseek-chat',
     messages: [
-      { role: 'system', content: buildSystemPrompt(country, category) },
-      { role: 'user',   content: buildUserMsg(text, country, category, detectedLangCode, retrievedContext) },
+      { role: 'system', content: buildSystemPrompt(category) },
+      { role: 'user',   content: buildUserMsg(text, category, detectedLangCode, retrievedContext) },
     ],
     temperature: 0.3,
     max_tokens: 8192,
@@ -247,7 +240,7 @@ const PROVIDERS = {
   }
 };
 
-async function analyzeWithAI(text, country, category, detectedLangCode, retrievedContext = '') {
+async function analyzeWithAI(text, category, detectedLangCode, retrievedContext = '') {
   const getProviderScore = (pKey) => {
     const stat = providerStats[pKey]
     return stat.latency + (stat.failures * 6000)
@@ -268,7 +261,7 @@ async function analyzeWithAI(text, country, category, detectedLangCode, retrieve
     const startTime = Date.now();
     try {
       const fn = PROVIDERS[key].fn;
-      const result = await fn(text, country, category, detectedLangCode, retrievedContext);
+      const result = await fn(text, category, detectedLangCode, retrievedContext);
       
       // Success update
       const duration = Date.now() - startTime;
@@ -374,7 +367,7 @@ function MainApp({ session, onLogout }) {
 
   // Input state
   const [situation, setSituation] = useState('')
-  const [country, setCountry] = useState('India')
+  const country = 'India'
   const [category, setCategory] = useState('Criminal')
 
   // RAG (Legal Database Search) state
@@ -411,6 +404,11 @@ function MainApp({ session, onLogout }) {
   const timerRef = useRef(null)
   const toolRef = useRef(null)
   const synthRef = useRef(window.speechSynthesis)
+  const voiceModeRef = useRef(voiceMode)
+
+  useEffect(() => {
+    voiceModeRef.current = voiceMode
+  }, [voiceMode])
 
   // ─── Recording Timer ────────────────────────────────────────────────────────
   const startTimer = () => {
@@ -421,6 +419,11 @@ function MainApp({ session, onLogout }) {
 
   // ─── MediaRecorder Start ────────────────────────────────────────────────────
   const startRecording = async () => {
+    setError(null)
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError('Microphone access is not supported by your browser or in this context (e.g. non-HTTPS).')
+      return
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       audioChunksRef.current = []
@@ -506,7 +509,7 @@ function MainApp({ session, onLogout }) {
         setRetrievedSections([])
       }
 
-      const parsed = await analyzeWithAI(text, country, category, detectedLang?.code, context)
+      const parsed = await analyzeWithAI(text, category, detectedLang?.code, context)
       setResult(parsed)
     } catch (e) {
       setError(e.message || 'Unknown error from AI service')
@@ -532,16 +535,43 @@ function MainApp({ session, onLogout }) {
   }
 
   const startVoiceAssistant = () => {
+    setError(null)
     setVoiceMode(true)
     setVoicePhase('speaking')
     setVoiceStatus('Greeting you...')
-    const utt = speak(`Hello, I am your LexAid legal assistant, powered by Sarvam AI. Please describe your legal situation in any language — Hindi, Tamil, Telugu, or English — and I will help you.`)
-    utt.onend = () => listenVoiceAssistant()
+    
+    let voiceAssistantTimeout = null
+    let didTransition = false
+
+    const handleTransition = () => {
+      if (didTransition) return
+      didTransition = true
+      if (voiceAssistantTimeout) clearTimeout(voiceAssistantTimeout)
+      listenVoiceAssistant()
+    }
+
+    try {
+      const utt = speak(`Hello, I am your LexAid legal assistant, powered by Sarvam AI. Please describe your legal situation in any language — Hindi, Tamil, Telugu, or English — and I will help you.`)
+      utt.onend = handleTransition
+      utt.onerror = handleTransition
+      // Fallback timeout of 6 seconds
+      voiceAssistantTimeout = setTimeout(() => {
+        handleTransition()
+      }, 6000)
+    } catch (e) {
+      console.warn('SpeechSynthesis error:', e)
+      handleTransition()
+    }
   }
 
   const listenVoiceAssistant = async () => {
     setVoicePhase('listening')
     setVoiceStatus('Listening... Speak in any language')
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError('Microphone access is not supported by your browser or in this context (e.g. non-HTTPS).')
+      setVoiceMode(false)
+      return
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       audioChunksRef.current = []
@@ -552,6 +582,7 @@ function MainApp({ session, onLogout }) {
       recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
       recorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop())
+        if (!voiceModeRef.current) return
         setVoicePhase('transcribing')
         setVoiceStatus('Transcribing your speech with Sarvam AI...')
         try {
@@ -559,6 +590,8 @@ function MainApp({ session, onLogout }) {
           const sr = await transcribeWithSarvam(blob)
           const tx = sr.transcript || ''
           const lc = sr.language_code || 'en-IN'
+          
+          if (!voiceModeRef.current) return
           setSituation(tx)
           setDetectedLang({ code: lc, name: LANGUAGE_NAMES[lc] || lc, flag: LANGUAGE_FLAGS[lc] || '🌐' })
 
@@ -579,15 +612,22 @@ function MainApp({ session, onLogout }) {
             setRetrievedSections([])
           }
 
-          const analysis = await analyzeWithAI(tx, country, category, lc, context)
+          if (!voiceModeRef.current) return
+          const analysis = await analyzeWithAI(tx, category, lc, context)
           setResult(analysis)
 
+          if (!voiceModeRef.current) return
           setVoicePhase('speaking')
           setVoiceStatus('Reading your legal guidance...')
           const summary = analysis.legal_summary || analysis.legal_implications?.slice(0, 350) || 'Analysis complete.'
           const responseText = `Here is your legal guidance. ${summary} Please review the detailed information on screen. Do you need help with anything else?`
           const utt = speak(responseText)
-          utt.onend = () => { setVoicePhase('idle'); setVoiceStatus('Done. Click Stop to exit or I can listen again.') }
+          utt.onend = () => {
+            if (voiceModeRef.current) {
+              setVoicePhase('idle')
+              setVoiceStatus('Done. Click Stop to exit or I can listen again.')
+            }
+          }
         } catch (e) {
           setError(e.message)
           setVoicePhase('idle')
@@ -608,11 +648,11 @@ function MainApp({ session, onLogout }) {
   }
 
   const stopVoiceAssistant = () => {
-    mediaRecorderRef.current?.stop()
-    synthRef.current.cancel()
     setVoiceMode(false)
     setVoicePhase('idle')
     setVoiceStatus('')
+    mediaRecorderRef.current?.stop()
+    synthRef.current.cancel()
   }
 
   // ─── Document Tools ──────────────────────────────────────────────────────────
@@ -874,7 +914,7 @@ function MainApp({ session, onLogout }) {
           </div>
           <div className="hero-stats">
             <div className="hero-stat"><span className="hero-stat-num">12+</span><span className="hero-stat-label">Languages</span></div>
-            <div className="hero-stat"><span className="hero-stat-num">23</span><span className="hero-stat-label">Jurisdictions</span></div>
+            <div className="hero-stat"><span className="hero-stat-num">28+</span><span className="hero-stat-label">States & UTs</span></div>
             <div className="hero-stat"><span className="hero-stat-num">Sarvam</span><span className="hero-stat-label">STT Engine</span></div>
             <div className="hero-stat"><span className="hero-stat-num">Multi-AI</span><span className="hero-stat-label">Failover Engine</span></div>
           </div>
@@ -933,13 +973,7 @@ function MainApp({ session, onLogout }) {
 
         <div className="input-card">
           {/* Selectors Row */}
-          <div className="input-row">
-            <div>
-              <label className="field-label" htmlFor="country-select">🌍 Country / Jurisdiction</label>
-              <select id="country-select" className="select-field" value={country} onChange={e => setCountry(e.target.value)}>
-                {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
+          <div className="input-row" style={{ gridTemplateColumns: '1fr' }}>
             <div>
               <label className="field-label" htmlFor="category-select">📁 Legal Category</label>
               <select id="category-select" className="select-field" value={category} onChange={e => setCategory(e.target.value)}>
@@ -948,22 +982,6 @@ function MainApp({ session, onLogout }) {
             </div>
           </div>
 
-          {/* RAG Database Grounding Toggle */}
-          <div className="rag-toggle-row">
-            <div className="rag-toggle-info">
-              <span className="rag-toggle-title">📖 Ground in Indian Legal Database (RAG)</span>
-              <span className="rag-toggle-desc">Retrieves specific articles & sections from central acts based on your situation</span>
-            </div>
-            <label className="switch" htmlFor="rag-toggle-checkbox">
-              <input
-                id="rag-toggle-checkbox"
-                type="checkbox"
-                checked={enableRAG}
-                onChange={e => setEnableRAG(e.target.checked)}
-              />
-              <span className="slider round"></span>
-            </label>
-          </div>
 
           {/* Language Support Hint */}
           <div className="lang-support-hint">
