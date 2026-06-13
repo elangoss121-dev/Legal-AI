@@ -67,22 +67,48 @@ export default function LoginPage({ onLogin }) {
       if (mode === 'login') {
         // 1. Secure check if the email exists in auth.users
         let emailExists = true
-        const { data: exists, error: checkError } = await supabase.rpc('check_email_exists', { p_email: email })
-        
-        if (checkError) {
-          console.warn('RPC check_email_exists failed or missing. Attempting direct sign-in fallback.', checkError)
-        } else {
-          emailExists = exists
+        let checkSuccessful = false
+
+        try {
+          const { data: exists, error: checkError } = await supabase.rpc('check_email_exists', { p_email: email })
+          if (checkError) {
+            console.warn('RPC check_email_exists failed or missing. Trying profiles table lookup.', checkError)
+          } else {
+            emailExists = exists
+            checkSuccessful = true
+          }
+        } catch (err) {
+          console.warn('Exception calling check_email_exists:', err)
         }
 
-        // 2. If email does not exist, prompt register
-        if (!emailExists) {
+        // 2. If RPC check failed, fall back to checking profiles table directly
+        if (!checkSuccessful) {
+          try {
+            const { data: profile, error: profileError } = await supabase
+              .from('profiles')
+              .select('email')
+              .eq('email', email)
+              .maybeSingle()
+
+            if (profileError) {
+              console.warn('Profiles table query failed. Attempting direct sign-in fallback.', profileError)
+            } else {
+              emailExists = !!profile
+              checkSuccessful = true
+            }
+          } catch (err) {
+            console.warn('Exception querying profiles table:', err)
+          }
+        }
+
+        // 3. If we are sure the email does not exist, prompt register
+        if (checkSuccessful && !emailExists) {
           setMode('prompt-register')
           setLoading(false)
           return
         }
 
-        // 3. Email exists (or check failed/skipped), attempt sign-in
+        // 4. Email exists (or all checks failed/skipped), attempt sign-in
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password
